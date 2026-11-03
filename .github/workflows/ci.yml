@@ -4,8 +4,60 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # Permite ejecución manual
+
+permissions:
+  contents: read      # Mínimo privilegio de seguridad
 
 jobs:
+  snyk-scan:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    defaults:
+      run:
+        working-directory: ms-vehiculos
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: ms-vehiculos/pom.xml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+
+      - name: Fix mvnw permissions
+        run: if [ -f mvnw ]; then chmod +x mvnw; fi
+
+      - name: Resolve Maven dependencies
+        run: mvn -B install -DskipTests
+
+      - name: Snyk test Java dependencies
+        run: |
+          snyk test --severity-threshold=high \
+            --file=pom.xml \
+            --json-file-output=snyk-report.json -d
+
+      - name: Upload Snyk JSON Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: ms-vehiculos/snyk-report.json
+  
   test:
     name: Run Tests with JaCoCo
     runs-on: ubuntu-latest
